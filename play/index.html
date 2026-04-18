@@ -381,6 +381,12 @@
     color: #aaa;
     margin-top: 2px;
   }
+  #attempt-count {
+    font-size: 0.85em;
+    color: #999;
+    margin-top: 6px;
+  }
+  #attempt-count span { color: #ffd; font-weight: bold; }
 
   /* ---------- Controls ---------- */
   .controls {
@@ -502,7 +508,8 @@
     <h2>★ You've arrived! ★</h2>
     <p>You reached your destination.</p>
     <div class="stats">
-      Room <strong id="win-room">—</strong> in <strong id="win-moves">—</strong> moves
+      Room <strong id="win-room">—</strong> in <strong id="win-moves">—</strong> moves,
+      <strong id="win-attempts">—</strong> unlock attempts
     </div>
     <div id="win-modal-buttons">
       <button onclick="newGame()">Play Again</button>
@@ -551,6 +558,7 @@
     <div id="room-display">
       Keycards form: <span id="room-number">—</span>
       <div id="openable-note">&nbsp;</div>
+      <div id="attempt-count">Unlock attempts: <span id="attempts">0</span></div>
     </div>
     <div class="controls">
       <button class="swap" onclick="swapCards()">⇄ Swap Top</button>
@@ -623,6 +631,7 @@ let playerRoom = 124;
 let targetRoom = null;
 let unlocked = new Set();
 let moveCount = 0;
+let unlockAttempts = 0;
 
 // ------------ Game rules ------------
 function canOpen(room) {
@@ -662,14 +671,17 @@ function isAdjacent(r1, r2) {
 // ------------ Actions ------------
 function rotateCard(i) {
   cards[i].state ^= 1;
+  unlockAttempts++;
   onCardChange();
 }
 function flipCard(i) {
   cards[i].state ^= 2;
+  unlockAttempts++;
   onCardChange();
 }
 function swapCards() {
   topCardIdx = 1 - topCardIdx;
+  unlockAttempts++;
   onCardChange();
 }
 
@@ -691,6 +703,7 @@ function moveTo(room) {
 function openWinModal() {
   document.getElementById('win-room').textContent = targetRoom;
   document.getElementById('win-moves').textContent = moveCount;
+  document.getElementById('win-attempts').textContent = unlockAttempts;
   document.getElementById('win-overlay').classList.add('show');
 }
 function closeWinModal() {
@@ -702,6 +715,7 @@ function newGame() {
   targetRoom = valid[Math.floor(Math.random() * valid.length)];
   playerRoom = 124;
   moveCount = 0;
+  unlockAttempts = 0;
   unlocked = new Set([124]);
   // Start with cards positioned to read "124": card A upright (top pair = [1,2]),
   // card B state 3 (top pair = [3,4]), card A on top → room = A[0] A[1] B[1] = 124.
@@ -783,6 +797,7 @@ function renderRoom() {
   } else {
     note.textContent = `Room ${r} cannot be opened by any pair of keycards.`;
   }
+  document.getElementById('attempts').textContent = unlockAttempts;
 }
 
 function describeRoom(r) {
