@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Ephemera</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Georgia, "Times New Roman", serif;
+    background: #1a1a1a;
+    color: #eee;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 20px;
+    /* Leave room on the right for the floating keycard panel. */
+    padding-right: 360px;
+  }
+  @media (max-width: 1100px) {
+    body { padding-right: 20px; }
+    #cards-panel { position: static !important; width: auto !important; margin: 20px auto !important; max-width: 340px; }
+  }
+  h1 {
+    text-align: center;
+    letter-spacing: 0.15em;
+    margin: 10px 0;
+    font-weight: normal;
+  }
+  #win-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    animation: fade-in 0.25s ease-out;
+  }
+  #win-overlay.show { display: flex; }
+  #win-modal {
+    background: linear-gradient(135deg, #f4d46e 0%, #d4af37 50%, #a8831c 100%);
+    color: #111;
+    padding: 30px 40px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8), 0 0 60px rgba(212, 175, 55, 0.4);
+    max-width: 400px;
+    animation: pop-in 0.3s cubic-bezier(0.5, 1.5, 0.5, 1);
+  }
+  #win-modal h2 {
+    margin: 0 0 10px;
+    font-size: 1.8em;
+    letter-spacing: 0.05em;
+  }
+  #win-modal p {
+    margin: 8px 0 18px;
+    font-size: 1.05em;
+  }
+  #win-modal .stats {
+    font-size: 0.95em;
+    color: #3a2a0a;
+    margin-bottom: 20px;
+  }
+  #win-modal .stats strong { font-size: 1.3em; }
+  #win-modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  #win-modal button {
+    background: #2c4a63;
+    color: #fff;
+    border: 1px solid #1a2c3c;
+    padding: 10px 20px;
+    font-size: 1em;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #win-modal button:hover { background: #3c5a73; }
+  #win-modal button.secondary {
+    background: transparent;
+    color: #3a2a0a;
+    border-color: #3a2a0a;
+  }
+  #win-modal button.secondary:hover { background: rgba(0, 0, 0, 0.1); }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pop-in {
+    from { transform: scale(0.7); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  /* ---------- Grid of rooms ---------- */
+  #grids {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: center;
+    margin: 0;
+  }
+  .floor {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .floor-label {
+    width: 72px;
+    text-align: right;
+    font-size: 0.9em;
+    color: #999;
+    letter-spacing: 0.05em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 54px);
+    grid-template-rows: repeat(4, 54px);
+    gap: 4px;
+    background: #2a2a2a;
+    padding: 4px;
+    border-radius: 4px;
+  }
+  .cell {
+    background: #a33838;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9em;
+    font-weight: bold;
+    border-radius: 3px;
+    position: relative;
+    transition: background 0.15s, transform 0.1s;
+    user-select: none;
+  }
+  .cell.unlocked { background: #3e8c55; }
+  .cell.current {
+    outline: 3px solid #4ac6ff;
+    outline-offset: -3px;
+    z-index: 2;
+  }
+  .cell.target::after {
+    content: "★";
+    position: absolute;
+    top: -2px;
+    right: 3px;
+    font-size: 0.85em;
+    color: gold;
+    text-shadow: 0 0 3px #000;
+  }
+  .cell.clickable {
+    cursor: pointer;
+  }
+  .cell.clickable:hover {
+    filter: brightness(1.25);
+    transform: scale(1.05);
+  }
+
+  /* ---------- Card stage ---------- */
+  #cards-panel {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 320px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    background: #222;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    z-index: 100;
+  }
+  #cards-panel h3 {
+    margin: 14px 0 10px;
+    text-align: center;
+    font-size: 1em;
+    letter-spacing: 0.1em;
+    color: #ccc;
+    font-weight: normal;
+  }
+  #cards-panel h3:first-child { margin-top: 0; }
+  #cards-panel h3:not(:first-child) {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid #444;
+  }
+
+  /* ---------- Compass ---------- */
+  #compass {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    padding: 4px 0 6px;
+  }
+  #status-box {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 0.95em;
+  }
+  .status-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .status-icon {
+    width: 18px;
+    text-align: center;
+    font-size: 1em;
+  }
+  .status-icon.you { color: #4ac6ff; }
+  .status-icon.dest { color: gold; }
+  .status-label {
+    color: #999;
+    font-size: 0.9em;
+    min-width: 18px;
+  }
+  .status-num {
+    font-weight: bold;
+    font-size: 1.15em;
+    color: #ffd;
+    letter-spacing: 0.05em;
+    min-width: 38px;
+  }
+  .status-desc {
+    color: #aaa;
+    font-size: 0.85em;
+  }
+  .dir-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 3px;
+    width: 156px;
+    margin: 0 auto;
+  }
+  .dir {
+    background: #2c4a63;
+    color: #eee;
+    border: 1px solid #6ab;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.75em;
+    padding: 4px 2px;
+    cursor: pointer;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.1;
+  }
+  .dir:not(:disabled):hover { background: #3c5a73; }
+  .dir:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .dir.locked {
+    background: #4a2828;
+    border-color: #a66;
+  }
+  .dir.out-of-bounds {
+    background: #2a2a2a;
+    border-color: #444;
+    color: #666;
+  }
+  .dir .dir-label {
+    font-weight: bold;
+    font-size: 1.05em;
+  }
+  .dir .dir-room {
+    font-size: 0.85em;
+    color: #ccc;
+  }
+  .dir.locked .dir-room { color: #f99; }
+  .dir-here {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4ac6ff;
+    font-size: 1.5em;
+  }
+  #cards-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+    gap: 12px;
+  }
+  #cards-stage {
+    position: relative;
+    width: 292px;
+    height: 240px;
+  }
+  .side-buttons {
+    position: absolute;
+    top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 40px;
+  }
+  .side-buttons.side-left { left: 0; }
+  .side-buttons.side-right { right: 0; }
+  .side-buttons button {
+    padding: 8px 4px;
+    font-size: 0.8em;
+    width: 100%;
+  }
+  .card {
+    position: absolute;
+    top: 10px;
+    width: 130px;
+    height: 220px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 10px;
+    transition: left 0.3s, box-shadow 0.2s, background 0.3s;
+    color: #fff;
+    border: 2px solid rgba(255,255,255,0.2);
+  }
+  .card.front {
+    background: linear-gradient(160deg, #3d6789 0%, #254863 100%);
+  }
+  .card.back {
+    background: linear-gradient(160deg, #6b4a7d 0%, #432c55 100%);
+  }
+  .card:hover { box-shadow: 0 8px 20px rgba(0,0,0,0.8); }
+  .card-top, .card-bot {
+    display: flex;
+    justify-content: space-around;
+    font-size: 2em;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+  }
+  .card-top .digit, .card-bot .digit {
+    width: 44px;
+    text-align: center;
+  }
+  .card-mid {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75em;
+    color: rgba(255,255,255,0.7);
+    letter-spacing: 0.1em;
+    padding: 6px 0;
+  }
+  .card-stripe {
+    height: 10px;
+    width: 100%;
+    background: rgba(0,0,0,0.35);
+    border-radius: 2px;
+  }
+  .orient-mark {
+    font-size: 1.1em;
+    color: #ffd86b;
+  }
+
+  #room-display {
+    font-size: 1.15em;
+    text-align: center;
+  }
+  #room-number {
+    font-weight: bold;
+    font-size: 1.9em;
+    letter-spacing: 0.1em;
+    padding: 0 6px;
+  }
+  #room-number.valid { color: #6f6; }
+  #room-number.invalid { color: #f77; }
+  #openable-note {
+    font-size: 0.85em;
+    color: #aaa;
+    margin-top: 2px;
+  }
+
+  /* ---------- Controls ---------- */
+  .controls {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .card-controls {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+  }
+  .card-controls .label {
+    font-size: 0.8em;
+    color: #bbb;
+    margin-right: 2px;
+  }
+  button {
+    background: #2c4a63;
+    color: #eee;
+    border: 1px solid #6ab;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: #3c5a73; }
+  button.swap {
+    background: #6b4a2c;
+    border-color: #c98;
+  }
+  button.swap:hover { background: #7c5a3c; }
+  button.reset {
+    background: #4a2c2c;
+    border-color: #c88;
+  }
+  button.reset:hover { background: #5a3c3c; }
+
+  #instructions {
+    margin-top: 15px;
+    font-size: 0.9em;
+    line-height: 1.55;
+    color: #bbb;
+  }
+  #main-actions {
+    margin-top: 16px;
+    text-align: center;
+  }
+
+  /* ---------- Scroll-to-current indicator ---------- */
+  #scroll-indicator {
+    display: none;
+    position: fixed;
+    bottom: 24px;
+    left: 0;
+    right: 360px;
+    text-align: center;
+    pointer-events: none;
+    z-index: 50;
+  }
+  #scroll-indicator.show { display: block; }
+  #scroll-indicator button {
+    pointer-events: auto;
+    background: #4ac6ff;
+    color: #08131d;
+    border: 2px solid #6fd;
+    padding: 9px 20px;
+    font-family: inherit;
+    font-size: 0.95em;
+    font-weight: bold;
+    border-radius: 24px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(74, 198, 255, 0.55), 0 0 20px rgba(74, 198, 255, 0.35);
+    animation: scroll-bounce 1.3s ease-in-out infinite;
+    letter-spacing: 0.04em;
+  }
+  #scroll-indicator button:hover { background: #6ad8ff; }
+  @keyframes scroll-bounce {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-7px); }
+  }
+  @media (max-width: 1100px) {
+    #scroll-indicator { right: 0; }
+  }
+  #main-actions button {
+    font-size: 1em;
+    padding: 8px 18px;
+  }
+  #instructions p { margin: 8px 0; }
+  #instructions strong { color: #ddd; }
+  .legend {
+    display: flex;
+    gap: 18px;
+    justify-content: center;
+    font-size: 0.85em;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .legend .swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    vertical-align: -2px;
+    margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>THE EPHEMERA</h1>
+
+<div id="win-overlay" onclick="if(event.target===this)closeWinModal()">
+  <div id="win-modal">
+    <h2>★ You've arrived! ★</h2>
+    <p>You reached your destination.</p>
+    <div class="stats">
+      Room <strong id="win-room">—</strong> in <strong id="win-moves">—</strong> moves
+    </div>
+    <div id="win-modal-buttons">
+      <button onclick="newGame()">Play Again</button>
+      <button class="secondary" onclick="closeWinModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="instructions">
+  <p><strong>The Ephemera</strong> is a hotel of 64 rooms arranged as a 4×4×4 cube. Each room's 3-digit number encodes its position (floor, row, column). You may only enter a room if your two keycards can unlock it. Each card has two digits along its top edge and two along its bottom. Overlap the cards so three digits show along the top. Manipulate the keycards to permanently unlock rooms.</p>
+  <p>Click a <span style="color:#3e8c55">green</span> cell adjacent to your current location (<span style="color:#4ac6ff">blue outline</span>) to walk there. Reach the <span style="color:gold">★ destination</span> to win.</p>
+</div>
+
+<div id="grids"></div>
+
+<div class="legend">
+  <span><span class="swatch" style="background:#a33838"></span>Locked</span>
+  <span><span class="swatch" style="background:#3e8c55"></span>Unlocked</span>
+  <span><span class="swatch" style="background:#3e8c55; outline:2px solid #4ac6ff"></span>You</span>
+  <span><span style="color:gold">★</span> Destination</span>
+</div>
+
+<div id="main-actions">
+  <button class="reset" onclick="newGame()">New Game</button>
+</div>
+
+<div id="scroll-indicator">
+  <button onclick="scrollToCurrent()">↓ You are here ↓</button>
+</div>
+
+<div id="cards-panel">
+  <h3>UNLOCK ROOMS</h3>
+  <div id="cards-area">
+    <div id="cards-stage">
+      <div class="side-buttons side-left">
+        <button onclick="rotateCard(0)" title="Rotate left card">Rotate</button>
+        <button onclick="flipCard(0)" title="Flip left card">Flip</button>
+      </div>
+      <div class="card" id="card-0"></div>
+      <div class="card" id="card-1"></div>
+      <div class="side-buttons side-right">
+        <button onclick="rotateCard(1)" title="Rotate right card">Rotate</button>
+        <button onclick="flipCard(1)" title="Flip right card">Flip</button>
+      </div>
+    </div>
+    <div id="room-display">
+      Keycards form: <span id="room-number">—</span>
+      <div id="openable-note">&nbsp;</div>
+    </div>
+    <div class="controls">
+      <button class="swap" onclick="swapCards()">⇄ Swap Top</button>
+    </div>
+  </div>
+  <h3>MOVE BETWEEN ROOMS</h3>
+  <div id="compass">
+    <div id="status-box">
+      <div class="status-line">
+        <span class="status-icon you">▶</span>
+        <span class="status-num" id="loc-num">—</span>
+        <span class="status-desc" id="loc-desc">—</span>
+      </div>
+      <div class="status-line">
+        <span class="status-icon dest">★</span>
+        <span class="status-num" id="target-num">—</span>
+        <span class="status-desc" id="target-desc">—</span>
+      </div>
+      <div class="status-line">
+        <span class="status-label">Moves:</span>
+        <span class="status-num" id="move-count">0</span>
+      </div>
+    </div>
+    <div class="dir-grid">
+      <div></div>
+      <button class="dir" id="dir-n"></button>
+      <button class="dir" id="dir-up"></button>
+      <button class="dir" id="dir-w"></button>
+      <div class="dir-here">◉</div>
+      <button class="dir" id="dir-e"></button>
+      <div></div>
+      <button class="dir" id="dir-s"></button>
+      <button class="dir" id="dir-down"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ------------ Card model ------------
+// Each keycard is portrait-oriented with 2 digits along its top edge and 2
+// along its bottom. "State" encodes its orientation:
+//   bit 0 = rotated 180° (swaps top and bottom edges)
+//   bit 1 = flipped over (reveals the back, which is mirrored)
+// Physically: front has top=[1,2] / bottom=[3,4]; back has top=[2,1] /
+// bottom=[4,3]. The 4 states yield the 4 valid leading pairs {12, 43, 21, 34}.
+const SEQS = [
+  [1, 2], // state 0 (front, upright)
+  [4, 3], // state 1 (front, rotated 180°)
+  [2, 1], // state 2 (back, upright)
+  [3, 4], // state 3 (back, rotated 180°)
+];
+const BOT_SEQS = [
+  [3, 4], // front bottom
+  [2, 1], // front rotated: old top reversed
+  [4, 3], // back bottom
+  [1, 2], // back rotated
+];
+
+const cards = [{ state: 0 }, { state: 0 }];
+// Cards sit side by side and overlap horizontally. The one on top covers one
+// of the other card's top digits, leaving 3 digits visible across the two tops.
+// When card 1 is on top, it covers card 0's right digit, so the visible window
+// reads A[0] + B[0] + B[1] (digit + pair). When card 0 is on top, it covers
+// card 1's left digit, so the window reads A[0] + A[1] + B[1] (pair + digit).
+let topCardIdx = 1;
+
+let playerRoom = 124;
+let targetRoom = null;
+let unlocked = new Set();
+let moveCount = 0;
+
+// ------------ Game rules ------------
+function canOpen(room) {
+  return /^([1-4](12|21|34|43)|(12|21|34|43)[1-4])$/.test(String(room));
+}
+
+function openableRooms() {
+  const rs = [];
+  for (let x = 1; x <= 4; x++)
+    for (let y = 1; y <= 4; y++)
+      for (let z = 1; z <= 4; z++) {
+        const n = 100 * x + 10 * y + z;
+        if (canOpen(n)) rs.push(n);
+      }
+  return rs;
+}
+
+function currentRoomNumber() {
+  const a = SEQS[cards[0].state];
+  const b = SEQS[cards[1].state];
+  if (topCardIdx === 1) {
+    // Card 1 covers card 0's right digit: A[0] visible, then B[0] B[1].
+    return `${a[0]}${b[0]}${b[1]}`;
+  } else {
+    // Card 0 covers card 1's left digit: A[0] A[1] visible, then B[1].
+    return `${a[0]}${a[1]}${b[1]}`;
+  }
+}
+
+function isAdjacent(r1, r2) {
+  const dx = Math.abs(Math.floor(r1 / 100) - Math.floor(r2 / 100));
+  const dy = Math.abs(Math.floor(r1 / 10) % 10 - Math.floor(r2 / 10) % 10);
+  const dz = Math.abs((r1 % 10) - (r2 % 10));
+  return dx + dy + dz === 1;
+}
+
+// ------------ Actions ------------
+function rotateCard(i) {
+  cards[i].state ^= 1;
+  onCardChange();
+}
+function flipCard(i) {
+  cards[i].state ^= 2;
+  onCardChange();
+}
+function swapCards() {
+  topCardIdx = 1 - topCardIdx;
+  onCardChange();
+}
+
+function onCardChange() {
+  const r = parseInt(currentRoomNumber(), 10);
+  if (canOpen(r)) unlocked.add(r);
+  renderAll();
+}
+
+function moveTo(room) {
+  if (!unlocked.has(room)) return;
+  if (!isAdjacent(playerRoom, room)) return;
+  playerRoom = room;
+  moveCount++;
+  renderAll();
+  if (playerRoom === targetRoom) openWinModal();
+}
+
+function openWinModal() {
+  document.getElementById('win-room').textContent = targetRoom;
+  document.getElementById('win-moves').textContent = moveCount;
+  document.getElementById('win-overlay').classList.add('show');
+}
+function closeWinModal() {
+  document.getElementById('win-overlay').classList.remove('show');
+}
+
+function newGame() {
+  const valid = openableRooms().filter(r => r !== 124);
+  targetRoom = valid[Math.floor(Math.random() * valid.length)];
+  playerRoom = 124;
+  moveCount = 0;
+  unlocked = new Set([124]);
+  // Start with cards positioned to read "124": card A upright (top pair = [1,2]),
+  // card B state 3 (top pair = [3,4]), card A on top → room = A[0] A[1] B[1] = 124.
+  cards[0].state = 0;
+  cards[1].state = 3;
+  topCardIdx = 0;
+  closeWinModal();
+  onCardChange();
+}
+
+// ------------ Render ------------
+function renderGrids() {
+  const g = document.getElementById('grids');
+  g.innerHTML = '';
+  for (let x = 4; x >= 1; x--) {
+    const floor = document.createElement('div');
+    floor.className = 'floor';
+    const label = document.createElement('div');
+    label.className = 'floor-label';
+    label.textContent = `Floor ${x}`;
+    floor.appendChild(label);
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    for (let y = 1; y <= 4; y++) {
+      for (let z = 1; z <= 4; z++) {
+        const n = 100 * x + 10 * y + z;
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.textContent = n;
+        if (unlocked.has(n)) cell.classList.add('unlocked');
+        if (n === playerRoom) cell.classList.add('current');
+        if (n === targetRoom) cell.classList.add('target');
+        if (unlocked.has(n) && n !== playerRoom && isAdjacent(n, playerRoom)) {
+          cell.classList.add('clickable');
+          cell.addEventListener('click', () => moveTo(n));
+        }
+        grid.appendChild(cell);
+      }
+    }
+    floor.appendChild(grid);
+    g.appendChild(floor);
+  }
+}
+
+function renderCard(i) {
+  const el = document.getElementById(`card-${i}`);
+  const c = cards[i];
+  const topSeq = SEQS[c.state];
+  const botSeq = BOT_SEQS[c.state];
+  const isBack = c.state >= 2;
+  const isRotated = (c.state & 1) === 1;
+  el.className = `card ${isBack ? 'back' : 'front'}`;
+  el.innerHTML = `
+    <div class="card-top">${topSeq.map(d => `<span class="digit">${d}</span>`).join('')}</div>
+    <div class="card-mid">
+      <span class="orient-mark">${isRotated ? '↻' : '↑'}</span>
+      <div class="card-stripe"></div>
+      <span>${isBack ? 'back' : ''}</span>
+    </div>
+    <div class="card-bot">${botSeq.map(d => `<span class="digit">${d}</span>`).join('')}</div>
+  `;
+  // Card 0 on left, card 1 on right, overlapping horizontally so whichever
+  // card is on top covers exactly one of the other card's top digits.
+  el.style.left = (i === 0) ? '46px' : '116px';
+  el.style.zIndex = (i === topCardIdx) ? 10 : 5;
+  el.onclick = () => { if (topCardIdx !== i) swapCards(); };
+}
+
+function renderRoom() {
+  const r = currentRoomNumber();
+  const rNum = parseInt(r, 10);
+  const el = document.getElementById('room-number');
+  el.textContent = r;
+  const valid = canOpen(rNum);
+  el.className = valid ? 'valid' : 'invalid';
+  const note = document.getElementById('openable-note');
+  if (valid) {
+    note.textContent = `Room ${r} is ${unlocked.has(rNum) ? 'already unlocked' : 'openable — now unlocked!'}`;
+  } else {
+    note.textContent = `Room ${r} cannot be opened by any pair of keycards.`;
+  }
+}
+
+function describeRoom(r) {
+  if (r == null) return '—';
+  const x = Math.floor(r / 100);
+  const y = Math.floor(r / 10) % 10;
+  const z = r % 10;
+  return `F${x}, R${y}, C${z}`;
+}
+
+function renderCompass() {
+  const pr = playerRoom;
+  const x = Math.floor(pr / 100);
+  const y = Math.floor(pr / 10) % 10;
+  const z = pr % 10;
+  document.getElementById('loc-num').textContent = pr;
+  document.getElementById('loc-desc').textContent = describeRoom(pr);
+  document.getElementById('target-num').textContent = targetRoom ?? '—';
+  document.getElementById('target-desc').textContent = describeRoom(targetRoom);
+  document.getElementById('move-count').textContent = moveCount;
+
+  // Map view: N=row-1, S=row+1, W=col-1, E=col+1; Up=floor+1, Down=floor-1.
+  const dirs = [
+    { key: 'n',    label: 'N',    inBounds: y > 1, room: 100 * x + 10 * (y - 1) + z },
+    { key: 's',    label: 'S',    inBounds: y < 4, room: 100 * x + 10 * (y + 1) + z },
+    { key: 'e',    label: 'E',    inBounds: z < 4, room: 100 * x + 10 * y + (z + 1) },
+    { key: 'w',    label: 'W',    inBounds: z > 1, room: 100 * x + 10 * y + (z - 1) },
+    { key: 'up',   label: '↑ Up',   inBounds: x < 4, room: 100 * (x + 1) + 10 * y + z },
+    { key: 'down', label: '↓ Dn',   inBounds: x > 1, room: 100 * (x - 1) + 10 * y + z },
+  ];
+  for (const d of dirs) {
+    const el = document.getElementById(`dir-${d.key}`);
+    el.classList.remove('locked', 'out-of-bounds');
+    if (!d.inBounds) {
+      el.innerHTML = `<span class="dir-label">${d.label}</span><span class="dir-room">—</span>`;
+      el.disabled = true;
+      el.classList.add('out-of-bounds');
+      el.onclick = null;
+    } else if (unlocked.has(d.room)) {
+      el.innerHTML = `<span class="dir-label">${d.label}</span><span class="dir-room">${d.room}</span>`;
+      el.disabled = false;
+      el.onclick = () => moveTo(d.room);
+    } else {
+      el.innerHTML = `<span class="dir-label">${d.label}</span><span class="dir-room">🔒 ${d.room}</span>`;
+      el.disabled = true;
+      el.classList.add('locked');
+      el.onclick = null;
+    }
+  }
+}
+
+function renderAll() {
+  renderGrids();
+  renderCard(0);
+  renderCard(1);
+  renderRoom();
+  renderCompass();
+  updateScrollIndicator();
+}
+
+function updateScrollIndicator() {
+  const cell = document.querySelector('.cell.current');
+  const ind = document.getElementById('scroll-indicator');
+  if (!cell) { ind.classList.remove('show'); return; }
+  const rect = cell.getBoundingClientRect();
+  // Show the indicator when the current cell is fully below the viewport.
+  const belowFold = rect.top > window.innerHeight - 20;
+  ind.classList.toggle('show', belowFold);
+}
+
+function scrollToCurrent() {
+  const cell = document.querySelector('.cell.current');
+  if (cell) cell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+window.addEventListener('scroll', updateScrollIndicator, { passive: true });
+window.addEventListener('resize', updateScrollIndicator);
+
+// ------------ Init ------------
+newGame();
+</script>
+
+</body>
+</html>
