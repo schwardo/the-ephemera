@@ -1,6 +1,7 @@
 // Computes shortest paths between every pair of openable rooms in the 4x4x4
-// hotel, scoring each path as (moves) + 0.5 * (direction changes), then groups
-// the pairs into Easy/Medium/Hard tertiles by score and emits JSON to stdout.
+// hotel, scoring each path as (moves) + 0.5 * (floor changes) + 0.1 *
+// (direction changes), then groups the pairs into Easy/Medium/Hard tertiles
+// by score and emits JSON to stdout.
 package main
 
 import (
@@ -67,8 +68,9 @@ func (p pq) Swap(i, j int)       { p[i], p[j] = p[j], p[i] }
 func (p *pq) Push(x interface{}) { *p = append(*p, x.(*item)) }
 func (p *pq) Pop() interface{}   { o := *p; n := len(o); x := o[n-1]; *p = o[:n-1]; return x }
 
-// shortestScore returns moves + 0.5*directionChanges along the optimal route
-// from start to dest. Adjacent moves through openable rooms only.
+// shortestScore returns moves + 0.5*floorChanges + 0.1*directionChanges along
+// the optimal route from start to dest. Adjacent moves through openable rooms
+// only. A floor change is any vertical move (direction index 0 or 1).
 func shortestScore(start, dest int) float64 {
 	if start == dest {
 		return 0
@@ -89,8 +91,11 @@ func shortestScore(start, dest int) float64 {
 		}
 		for _, n := range neighborsOf(it.s.room) {
 			extra := 1.0
-			if it.s.dir != -1 && it.s.dir != n.dir {
+			if n.dir == 0 || n.dir == 1 {
 				extra += 0.5
+			}
+			if it.s.dir != -1 && it.s.dir != n.dir {
+				extra += 0.1
 			}
 			ns := state{n.room, n.dir}
 			nc := it.cost + extra
