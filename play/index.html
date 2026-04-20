@@ -693,6 +693,7 @@ let targetRoom = null;
 let unlocked = new Set();
 let moveCount = 0;
 let unlockAttempts = 0;
+let justUnlockedNew = false;
 
 // ------------ Game rules ------------
 function canOpen(room) {
@@ -737,7 +738,10 @@ function swapCards() {
 
 function onCardChange() {
   const r = parseInt(currentRoomNumber(), 10);
-  if (canOpen(r)) unlocked.add(r);
+  const wasUnlocked = unlocked.has(r);
+  const openable = canOpen(r);
+  if (openable) unlocked.add(r);
+  justUnlockedNew = openable && !wasUnlocked;
   renderAll();
 }
 
@@ -844,7 +848,9 @@ function renderRoom() {
   el.className = valid ? 'valid' : 'invalid';
   const note = document.getElementById('openable-note');
   if (valid) {
-    note.textContent = `Room ${r} is ${unlocked.has(rNum) ? 'already unlocked' : 'openable — now unlocked!'}`;
+    note.textContent = justUnlockedNew
+      ? `Room ${r} is now unlocked!`
+      : `Room ${r} was already unlocked.`;
   } else {
     note.textContent = `Room ${r} cannot be opened by any pair of keycards.`;
   }
